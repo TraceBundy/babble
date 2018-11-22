@@ -77,6 +77,18 @@ func (i *InmemTransport) Sync(target string, args *SyncRequest, resp *SyncRespon
 	return nil
 }
 
+func (i *InmemTransport) Join(target string, args *JoinRequest, resp *JoinResponse) error {
+	rpcResp, err := i.makeRPC(target, args, nil, i.timeout)
+	if err != nil {
+		return err
+	}
+
+	// Copy the result back
+	out := rpcResp.Response.(*JoinResponse)
+	*resp = *out
+	return nil
+}
+
 // Sync implements the Transport interface.
 func (i *InmemTransport) EagerSync(target string, args *EagerSyncRequest, resp *EagerSyncResponse) error {
 	rpcResp, err := i.makeRPC(target, args, nil, i.timeout)

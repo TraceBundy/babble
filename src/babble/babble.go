@@ -50,9 +50,9 @@ func (b *Babble) initTransport() error {
 
 func (b *Babble) initPeers() error {
 	if !b.Config.LoadPeers {
-		if b.Peers == nil {
-			return fmt.Errorf("Did not load peers but none was present")
-		}
+		// if b.Peers == nil {
+		// 	return fmt.Errorf("Did not load peers but none was present")
+		// }
 
 		return nil
 	}
@@ -62,7 +62,11 @@ func (b *Babble) initPeers() error {
 	participants, err := peerStore.PeerSet()
 
 	if err != nil {
-		return err
+		b.Config.Logger.Warn("Boostrap node: No peers from peers.json")
+
+		b.Peers = peers.NewPeerSet([]*peers.Peer{})
+
+		return nil
 	}
 
 	if participants.Len() < 2 {
@@ -124,6 +128,7 @@ func (b *Babble) initKey() error {
 
 		b.Config.Key = privKey
 	}
+
 	return nil
 }
 
@@ -131,6 +136,16 @@ func (b *Babble) initNode() error {
 	key := b.Config.Key
 
 	nodePub := fmt.Sprintf("0x%X", crypto.FromECDSAPub(&key.PublicKey))
+
+	// add self peer
+	if b.Peers.Len() == 0 {
+		b.Peers = b.Peers.WithNewPeer(peers.NewPeer(nodePub, b.Config.BindAddr))
+		// b.Config.Logger.Error("ADD SELF", b.Peers, b.Store.LastRound())
+
+		b.Store.SetPeerSet(-1, b.Peers)
+		b.Store.SetPeerSet(0, b.Peers)
+	}
+
 	n, ok := b.Peers.ByPubKey[nodePub]
 
 	if !ok {
@@ -200,12 +215,12 @@ func (b *Babble) Init() error {
 	return nil
 }
 
-func (b *Babble) Run() {
+func (b *Babble) Run(addr string) {
 	if b.Service != nil {
 		go b.Service.Serve()
 	}
 
-	b.Node.Run(true)
+	b.Node.Run(addr, true)
 }
 
 func Keygen(datadir string) (*ecdsa.PrivateKey, error) {

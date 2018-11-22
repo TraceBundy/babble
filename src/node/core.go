@@ -170,13 +170,14 @@ func (c *Core) Commit(block *hg.Block) error {
 		"block":                          block.Index(),
 		"state_hash":                     fmt.Sprintf("%X", commitResponse.StateHash),
 		"accepted_internal_transactions": commitResponse.AcceptedInternalTransactions,
-		"err": err,
+		"err":                            err,
 	}).Debug("CommitBlock Response")
 
 	//XXX Handle errors
 
 	//Handle the response to set Block StateHash and process accepted
 	//InternalTransactions which might update the PeerSet.
+
 	if err == nil {
 		block.Body.StateHash = commitResponse.StateHash
 
@@ -328,7 +329,6 @@ func (c *Core) Sync(unknownEvents []hg.WireEvent) error {
 }
 
 func (c *Core) FastForward(peer string, block *hg.Block, frame *hg.Frame) error {
-
 	peerSet := peers.NewPeerSet(frame.Peers)
 
 	//Check Block Signatures

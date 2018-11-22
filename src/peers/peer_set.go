@@ -49,6 +49,7 @@ func NewPeerSet(peers []*Peer) *PeerSet {
 func (peerSet *PeerSet) WithNewPeer(peer *Peer) *PeerSet {
 	peers := append(peerSet.Peers, peer)
 	newPeerSet := NewPeerSet(peers)
+	fmt.Println("NEW PEER", peer)
 	return newPeerSet
 }
 

@@ -14,6 +14,8 @@ const (
 
 	CatchingUp
 
+	Joining
+
 	Shutdown
 )
 
@@ -21,6 +23,8 @@ func (s NodeState) String() string {
 	switch s {
 	case Babbling:
 		return "Babbling"
+	case Joining:
+		return "Joining"
 	case CatchingUp:
 		return "CatchingUp"
 	case Shutdown:

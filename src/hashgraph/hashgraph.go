@@ -252,6 +252,7 @@ func (h *Hashgraph) _round(x string) (int, error) {
 		Reset hashgraph).
 	*/
 	parentRoundObj, err := h.Store.GetRound(parentRound)
+
 	if err != nil {
 		if common.Is(err, common.KeyNotFound) {
 			return parentRound, nil
@@ -260,9 +261,15 @@ func (h *Hashgraph) _round(x string) (int, error) {
 		}
 	}
 
+	peerSet, err := h.Store.GetPeerSet(parentRound)
+	if err != nil {
+		return -1, err
+	}
+
 	c := 0
 	for _, w := range parentRoundObj.Witnesses() {
-		ss, err := h.stronglySee(x, w, parentRoundObj.PeerSet)
+		ss, err := h.stronglySee(x, w, peerSet)
+		h.logger.Error("SUPER MAJ ", parentRound, peerSet, ss, err)
 		if err != nil {
 			return math.MinInt32, err
 		}
@@ -271,7 +278,7 @@ func (h *Hashgraph) _round(x string) (int, error) {
 		}
 	}
 
-	if c >= parentRoundObj.PeerSet.SuperMajority() {
+	if c >= peerSet.SuperMajority() {
 		parentRound++
 	}
 
@@ -849,11 +856,20 @@ func (h *Hashgraph) DecideFame() error {
 	decidedRounds := map[int]int{} //[round number] => index in h.PendingRounds
 
 	for pos, r := range h.PendingRounds {
+
 		roundIndex := r.Index
 		rRoundInfo, err := h.Store.GetRound(roundIndex)
 		if err != nil {
 			return err
 		}
+
+		rPeerSet, err := h.Store.GetPeerSet(roundIndex)
+		if err != nil {
+			return err
+		}
+
+		h.logger.Error("rPeerSet", rPeerSet.Len())
+
 		for _, x := range rRoundInfo.Witnesses() {
 			if rRoundInfo.IsDecided(x) {
 				continue
@@ -864,7 +880,16 @@ func (h *Hashgraph) DecideFame() error {
 				if err != nil {
 					return err
 				}
+
+				jPeerSet, err := h.Store.GetPeerSet(j)
+				if err != nil {
+					return err
+				}
+
+				h.logger.Error("jPeerSet", jPeerSet.Len())
+
 				for _, y := range jRoundInfo.Witnesses() {
+
 					diff := j - roundIndex
 					if diff == 1 {
 						ycx, err := h.see(y, x)
@@ -880,9 +905,17 @@ func (h *Hashgraph) DecideFame() error {
 
 						//collection of witnesses from round j-1 that are
 						//strongly seen by y, based on round j-1 PeerSet.
+
+						jPrevPeerSet, err := h.Store.GetPeerSet(j - 1)
+						if err != nil {
+							return err
+						}
+
+						h.logger.Error("jPrevPeerSet", jPrevPeerSet.Len())
+
 						ssWitnesses := []string{}
 						for _, w := range jPrevRoundInfo.Witnesses() {
-							ss, err := h.stronglySee(y, w, jPrevRoundInfo.PeerSet)
+							ss, err := h.stronglySee(y, w, jPrevPeerSet)
 							if err != nil {
 								return err
 							}
@@ -903,6 +936,7 @@ func (h *Hashgraph) DecideFame() error {
 						}
 						v := false
 						t := nays
+
 						if yays >= nays {
 							v = true
 							t = yays
@@ -912,8 +946,11 @@ func (h *Hashgraph) DecideFame() error {
 						//completely arbitrary.
 
 						//normal round
-						if math.Mod(float64(diff), float64(rRoundInfo.PeerSet.Len())) > 0 {
-							if t >= jRoundInfo.PeerSet.SuperMajority() {
+						if math.Mod(float64(diff), float64(rPeerSet.Len())) > 0 {
+							h.logger.Error("SSWITNESS", t, jPeerSet.SuperMajority())
+
+							if t >= jPeerSet.SuperMajority() {
+
 								rRoundInfo.SetFame(x, v)
 								setVote(votes, y, x, v)
 								break VOTE_LOOP //break out of j loop
@@ -921,7 +958,9 @@ func (h *Hashgraph) DecideFame() error {
 								setVote(votes, y, x, v)
 							}
 						} else { //coin round
-							if t >= jRoundInfo.PeerSet.SuperMajority() {
+							if t >= jPeerSet.SuperMajority() {
+								h.logger.Error("SSWITNESS COIN", t, jPeerSet.SuperMajority(), v)
+								rRoundInfo.SetFame(x, v)
 								setVote(votes, y, x, v)
 							} else {
 								setVote(votes, y, x, middleBit(y)) //middle bit of y's hash
@@ -957,6 +996,7 @@ func (h *Hashgraph) DecideRoundReceived() error {
 	   unique famous witnesses have received it, if all earlier rounds have the
 	   fame of all witnesses decided"
 	*/
+
 	for _, x := range h.UndeterminedEvents {
 		received := false
 		r, err := h.round(x)
@@ -1028,6 +1068,8 @@ func (h *Hashgraph) DecideRoundReceived() error {
 	}
 
 	h.UndeterminedEvents = newUndeterminedEvents
+
+	fmt.Println(h.UndeterminedEvents)
 
 	return nil
 }
@@ -1200,6 +1242,7 @@ func (h *Hashgraph) GetFrame(roundReceived int) (*Frame, error) {
 		if _, ok := roots[p]; !ok {
 			var root *Root
 			lastConsensusEventHash, isRoot, err := h.Store.LastConsensusEventFrom(p)
+			h.logger.Error("FRAMMMMEEE", roundReceived, err)
 			if err != nil {
 				return nil, err
 			}

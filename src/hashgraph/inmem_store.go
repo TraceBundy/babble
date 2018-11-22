@@ -45,7 +45,7 @@ func NewInmemStore(peerSet *peers.PeerSet, cacheSize int) *InmemStore {
 		lastConsensusEvents:    map[string]string{},
 	}
 
-	store.SetPeerSet(0, peerSet)
+	// store.SetPeerSet(0, peerSet)
 
 	return store
 }
@@ -80,6 +80,19 @@ func (s *InmemStore) SetPeerSet(round int, peerSet *peers.PeerSet) error {
 	if err != nil {
 		return err
 	}
+
+	// roundInfo, err := s.GetRound(round)
+	// if err != nil {
+	// 	fmt.Println("ERROR ROUND", err)
+	// 	return err
+	// }
+
+	// roundInfo.PeerSet = peerSet
+
+	// if err := s.SetRound(round, roundInfo); err != nil {
+	// 	fmt.Println("ERROR SET ROUND", err)
+	// 	return err
+	// }
 
 	//Extend PartipantEventsCache and Roots with new peers
 	for id, p := range peerSet.ByID {

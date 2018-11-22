@@ -109,3 +109,15 @@ func (p *InmemProxy) Restore(snapshot []byte) error {
 
 	return err
 }
+
+//
+// func (p *InmemProxy) JoinNetwork(addr string) error {
+// 	stateHash, err := p.handler.RestoreHandler(snapshot)
+
+// 	p.logger.WithFields(logrus.Fields{
+// 		"state_hash": stateHash,
+// 		"err":        err,
+// 	}).Debug("InmemProxy.Restore")
+
+// 	return err
+// }

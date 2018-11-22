@@ -68,7 +68,7 @@ func NewNode(conf *Config,
 	node.needBoostrap = store.NeedBoostrap()
 
 	//Initialize as Babbling
-	node.setState(Babbling)
+	node.setState(CatchingUp)
 
 	return &node
 }
@@ -85,13 +85,23 @@ func (n *Node) Init() error {
 	return n.core.SetHeadAndSeq()
 }
 
-func (n *Node) RunAsync(gossip bool) {
-	n.logger.Debug("runasync")
+func (n *Node) connect(addr string) error {
+	if len(addr) > 0 {
+		if _, err := n.requestJoin(addr); err != nil {
+			n.logger.Error("Cannot join:", addr, err)
 
-	go n.Run(gossip)
+			n.setState(Shutdown)
+
+			return err
+		}
+	}
+
+	n.setState(Babbling)
+
+	return nil
 }
 
-func (n *Node) Run(gossip bool) {
+func (n *Node) Run(addr string, gossip bool) {
 	//The ControlTimer allows the background routines to control the
 	//heartbeat timer when the node is in the Babbling state. The timer should
 	//only be running when there are uncommitted transactions in the system.
@@ -112,6 +122,8 @@ func (n *Node) Run(gossip bool) {
 			n.babble(gossip)
 		case CatchingUp:
 			n.fastForward()
+		case Joining:
+			n.connect(addr)
 		case Shutdown:
 			return
 		}
@@ -171,6 +183,13 @@ func (n *Node) babble(gossip bool) {
 			if gossip {
 				n.logger.Debug("Time to gossip!")
 				peer := n.core.peerSelector.Next()
+
+				if peer == nil {
+					n.logger.Debug("Waiting for peers...")
+
+					continue
+				}
+
 				n.goFunc(func() { n.gossip(peer, returnCh) })
 			}
 			n.resetTimer()
@@ -186,6 +205,8 @@ func (n *Node) processRPC(rpc net.RPC) {
 	switch cmd := rpc.Command.(type) {
 	case *net.SyncRequest:
 		n.processSyncRequest(rpc, cmd)
+	case *net.JoinRequest:
+		n.processJoinRequest(rpc, cmd)
 	case *net.EagerSyncRequest:
 		n.processEagerSyncRequest(rpc, cmd)
 	case *net.FastForwardRequest:
@@ -266,6 +287,47 @@ func (n *Node) processSyncRequest(rpc net.RPC, cmd *net.SyncRequest) {
 		"sync_limit": resp.SyncLimit,
 		"error":      respErr,
 	}).Debug("Responding to SyncRequest")
+
+	rpc.Respond(resp, respErr)
+}
+
+func (n *Node) processJoinRequest(rpc net.RPC, cmd *net.JoinRequest) {
+	n.logger.WithFields(logrus.Fields{
+		"from_id": cmd.FromID,
+		"peer":    cmd.Peer,
+	}).Debug("process JoinRequest")
+
+	resp := &net.JoinResponse{
+		FromID: n.id,
+		Answer: true,
+	}
+
+	var respErr error
+
+	// n.coreLock.Lock()
+
+	//XXX: pass through the proxy to validate the new peer before adding it
+	n.addInternalTransaction(hg.NewInternalTransactionJoin(cmd.Peer))
+
+	if n.core.peers.Len() == 1 {
+		//force consensus
+		for i := 0; i < 10; i++ {
+			if err := n.core.AddSelfEvent(""); err != nil {
+				respErr = err
+
+				break
+			}
+
+		}
+		if err := n.core.RunConsensus(); err != nil {
+			respErr = err
+
+			// break
+		}
+
+	}
+
+	// n.coreLock.Unlock()
 
 	rpc.Respond(resp, respErr)
 }
@@ -501,6 +563,12 @@ func (n *Node) fastForward() error {
 	//fastForwardRequest
 	peer := n.core.peerSelector.Next()
 
+	if peer == nil {
+		n.setState(Joining)
+
+		return nil
+	}
+
 	start := time.Now()
 
 	resp, err := n.requestFastForward(peer.NetAddr)
@@ -548,7 +616,7 @@ func (n *Node) fastForward() error {
 
 	n.logger.Debug("Fast-Forward OK")
 
-	n.setState(Babbling)
+	n.setState(Joining)
 
 	return nil
 }
@@ -562,6 +630,19 @@ func (n *Node) requestSync(target string, known map[int]int) (net.SyncResponse, 
 	var out net.SyncResponse
 
 	err := n.trans.Sync(target, &args, &out)
+
+	return out, err
+}
+
+func (n *Node) requestJoin(target string) (net.JoinResponse, error) {
+	args := net.JoinRequest{
+		FromID: n.id,
+		Peer:   *n.core.peers.ByID[n.id],
+	}
+
+	var out net.JoinResponse
+
+	err := n.trans.Join(target, &args, &out)
 
 	return out, err
 }

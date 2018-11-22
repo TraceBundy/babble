@@ -41,12 +41,14 @@ func (ps *RandomPeerSelector) UpdateLast(peer int) {
 func (ps *RandomPeerSelector) Next() *peers.Peer {
 	selectablePeers := ps.peers.Peers
 
-	if len(selectablePeers) > 1 {
-		_, selectablePeers = peers.ExcludePeer(selectablePeers, ps.selfID)
+	_, selectablePeers = peers.ExcludePeer(selectablePeers, ps.selfID)
 
-		if len(selectablePeers) > 1 {
-			_, selectablePeers = peers.ExcludePeer(selectablePeers, ps.last)
-		}
+	if len(selectablePeers) > 1 {
+		_, selectablePeers = peers.ExcludePeer(selectablePeers, ps.last)
+	}
+
+	if len(selectablePeers) == 0 {
+		return nil
 	}
 
 	i := rand.Intn(len(selectablePeers))

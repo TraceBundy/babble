@@ -1,6 +1,9 @@
 package net
 
-import "github.com/mosaicnetworks/babble/src/hashgraph"
+import (
+	"github.com/mosaicnetworks/babble/src/hashgraph"
+	"github.com/mosaicnetworks/babble/src/peers"
+)
 
 type SyncRequest struct {
 	FromID int
@@ -12,6 +15,18 @@ type SyncResponse struct {
 	SyncLimit bool
 	Events    []hashgraph.WireEvent
 	Known     map[int]int
+}
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+type JoinRequest struct {
+	FromID int
+	Peer   peers.Peer
+}
+
+type JoinResponse struct {
+	FromID int
+	Answer bool
 }
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

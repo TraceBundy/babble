@@ -8,6 +8,7 @@ type CLIConfig struct {
 	ProxyAddr  string              `mapstructure:"proxy-listen"`
 	ClientAddr string              `mapstructure:"client-connect"`
 	Standalone bool                `mapstructure:"standalone"`
+	Connect    string              `mapstructure:"connect"`
 }
 
 //NewDefaultCLIConfig creates a CLIConfig with default values
@@ -17,5 +18,6 @@ func NewDefaultCLIConfig() *CLIConfig {
 		ProxyAddr:  "127.0.0.1:1338",
 		ClientAddr: "127.0.0.1:1339",
 		Standalone: false,
+		Connect:    "",
 	}
 }

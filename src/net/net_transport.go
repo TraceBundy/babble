@@ -19,6 +19,7 @@ MOST OF THIS IS TAKEN FROM HASHICORP RAFT
 
 const (
 	rpcSync uint8 = iota
+	rpcJoin
 	rpcEagerSync
 	rpcFastForward
 )
@@ -207,6 +208,10 @@ func (n *NetworkTransport) Sync(target string, args *SyncRequest, resp *SyncResp
 	return n.genericRPC(target, rpcSync, args, resp)
 }
 
+func (n *NetworkTransport) Join(target string, args *JoinRequest, resp *JoinResponse) error {
+	return n.genericRPC(target, rpcJoin, args, resp)
+}
+
 // EagerSync implements the Transport interface.
 func (n *NetworkTransport) EagerSync(target string, args *EagerSyncRequest, resp *EagerSyncResponse) error {
 	return n.genericRPC(target, rpcEagerSync, args, resp)
@@ -350,6 +355,12 @@ func (n *NetworkTransport) handleCommand(r *bufio.Reader, dec *json.Decoder, enc
 	switch rpcType {
 	case rpcSync:
 		var req SyncRequest
+		if err := dec.Decode(&req); err != nil {
+			return err
+		}
+		rpc.Command = &req
+	case rpcJoin:
+		var req JoinRequest
 		if err := dec.Decode(&req); err != nil {
 			return err
 		}

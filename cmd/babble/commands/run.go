@@ -50,10 +50,11 @@ func runBabble(cmd *cobra.Command, args []string) error {
 
 	if err := engine.Init(); err != nil {
 		config.Babble.Logger.Error("Cannot initialize engine:", err)
+
 		return err
 	}
 
-	engine.Run()
+	engine.Run(config.Connect)
 
 	return nil
 }
@@ -70,13 +71,14 @@ func AddRunFlags(cmd *cobra.Command) {
 
 	// Network
 	cmd.Flags().StringP("listen", "l", config.Babble.BindAddr, "Listen IP:Port for babble node")
+	cmd.Flags().StringP("connect", "c", config.Connect, "Join the babble network through IP:Port")
 	cmd.Flags().DurationP("timeout", "t", config.Babble.NodeConfig.TCPTimeout, "TCP Timeout")
 	cmd.Flags().Int("max-pool", config.Babble.MaxPool, "Connection pool size max")
 
 	// Proxy
 	cmd.Flags().Bool("standalone", config.Standalone, "Do not create a proxy")
 	cmd.Flags().StringP("proxy-listen", "p", config.ProxyAddr, "Listen IP:Port for babble proxy")
-	cmd.Flags().StringP("client-connect", "c", config.ClientAddr, "IP:Port to connect to client")
+	cmd.Flags().StringP("client-connect", "r", config.ClientAddr, "IP:Port to connect to client")
 
 	// Service
 	cmd.Flags().StringP("service-listen", "s", config.Babble.ServiceAddr, "Listen IP:Port for HTTP service")
@@ -117,6 +119,7 @@ func loadConfig(cmd *cobra.Command, args []string) error {
 		"babble.Node.TCPTimeout":       config.Babble.NodeConfig.TCPTimeout,
 		"babble.node.CacheSize":        config.Babble.NodeConfig.CacheSize,
 		"babble.node.SyncLimit":        config.Babble.NodeConfig.SyncLimit,
+		"Connect":                      config.Connect,
 		"ProxyAddr":                    config.ProxyAddr,
 		"ClientAddr":                   config.ClientAddr,
 		"Standalone":                   config.Standalone,
