@@ -261,15 +261,26 @@ func (h *Hashgraph) _round(x string) (int, error) {
 		}
 	}
 
-	peerSet, err := h.Store.GetPeerSet(parentRound)
+	parentRoundPeerSet, err := h.Store.GetPeerSet(parentRound)
 	if err != nil {
-		return -1, err
+		if common.Is(err, common.KeyNotFound) {
+			return parentRound, nil
+		} else {
+			return math.MinInt32, err
+		}
+	}
+
+	if err != nil {
+		if common.Is(err, common.KeyNotFound) {
+			return parentRound, nil
+		} else {
+			return math.MinInt32, err
+		}
 	}
 
 	c := 0
 	for _, w := range parentRoundObj.Witnesses() {
-		ss, err := h.stronglySee(x, w, peerSet)
-		h.logger.Error("SUPER MAJ ", parentRound, peerSet, ss, err)
+		ss, err := h.stronglySee(x, w, parentRoundPeerSet)
 		if err != nil {
 			return math.MinInt32, err
 		}
@@ -278,7 +289,7 @@ func (h *Hashgraph) _round(x string) (int, error) {
 		}
 	}
 
-	if c >= peerSet.SuperMajority() {
+	if c >= parentRoundPeerSet.SuperMajority() {
 		parentRound++
 	}
 
@@ -784,11 +795,8 @@ func (h *Hashgraph) DivideRounds() error {
 				if !common.Is(err, common.KeyNotFound) {
 					return err
 				}
-				peerSet, err := h.Store.GetPeerSet(roundNumber)
-				if err != nil {
-					return err
-				}
-				roundInfo = NewRoundInfo(peerSet)
+
+				roundInfo = NewRoundInfo()
 			}
 
 			/*
@@ -858,6 +866,7 @@ func (h *Hashgraph) DecideFame() error {
 	for pos, r := range h.PendingRounds {
 
 		roundIndex := r.Index
+
 		rRoundInfo, err := h.Store.GetRound(roundIndex)
 		if err != nil {
 			return err
@@ -903,10 +912,15 @@ func (h *Hashgraph) DecideFame() error {
 							return err
 						}
 
+						jPrevPeerSet, err := h.Store.GetPeerSet(j - 1)
+						if err != nil {
+							return err
+						}
+
 						//collection of witnesses from round j-1 that are
 						//strongly seen by y, based on round j-1 PeerSet.
 
-						jPrevPeerSet, err := h.Store.GetPeerSet(j - 1)
+						jPrevPeerSet, err = h.Store.GetPeerSet(j - 1)
 						if err != nil {
 							return err
 						}
@@ -950,7 +964,6 @@ func (h *Hashgraph) DecideFame() error {
 							h.logger.Error("SSWITNESS", t, jPeerSet.SuperMajority())
 
 							if t >= jPeerSet.SuperMajority() {
-
 								rRoundInfo.SetFame(x, v)
 								setVote(votes, y, x, v)
 								break VOTE_LOOP //break out of j loop
@@ -976,7 +989,7 @@ func (h *Hashgraph) DecideFame() error {
 			return err
 		}
 
-		if rRoundInfo.WitnessesDecided() {
+		if rRoundInfo.WitnessesDecided(rPeerSet) {
 			decidedRounds[roundIndex] = pos
 		}
 
@@ -1017,10 +1030,15 @@ func (h *Hashgraph) DecideRoundReceived() error {
 				return err
 			}
 
+			tPeers, err := h.Store.GetPeerSet(i)
+			if err != nil {
+				return err
+			}
+
 			//We are looping from earlier to later rounds; so if we encounter
 			//one round with undecided witnesses, we are sure that this event
 			//is not "received". Break out of i loop
-			if !(tr.WitnessesDecided()) {
+			if !(tr.WitnessesDecided(tPeers)) {
 				break
 			}
 
@@ -1037,7 +1055,7 @@ func (h *Hashgraph) DecideRoundReceived() error {
 				}
 			}
 
-			if len(s) == len(fws) && len(s) >= tr.PeerSet.SuperMajority() {
+			if len(s) == len(fws) && len(s) >= tPeers.SuperMajority() {
 				received = true
 
 				ex, err := h.Store.GetEvent(x)
@@ -1175,7 +1193,7 @@ func (h *Hashgraph) ProcessInternalTransactions(tx *InternalTransaction, roundRe
 	tx.Peer.ComputeID()
 
 	for i := roundReceived + 4; i < h.Store.LastRound(); i++ {
-		round, err := h.Store.GetRound(i)
+		peerSet, err := h.Store.GetPeerSet(i)
 
 		if err != nil {
 			h.logger.Error("ProcessInternalTransaction: ", err)
@@ -1183,12 +1201,20 @@ func (h *Hashgraph) ProcessInternalTransactions(tx *InternalTransaction, roundRe
 			continue
 		}
 
+		var newPeers *peers.PeerSet
+
 		if tx.Type == PEER_ADD {
-			round.PeerSet = round.PeerSet.WithNewPeer(&tx.Peer)
+			newPeers = peerSet.WithNewPeer(&tx.Peer)
 		}
 
 		if tx.Type == PEER_REMOVE {
-			round.PeerSet = round.PeerSet.WithRemovedPeer(&tx.Peer)
+			newPeers = peerSet.WithRemovedPeer(&tx.Peer)
+		}
+
+		if err := h.Store.SetPeerSet(i, newPeers); err != nil {
+			h.logger.Error("ProcessInternalTransaction: ", err)
+
+			continue
 		}
 	}
 
@@ -1205,6 +1231,11 @@ func (h *Hashgraph) GetFrame(roundReceived int) (*Frame, error) {
 
 	//Get the Round and corresponding consensus Events
 	round, err := h.Store.GetRound(roundReceived)
+	if err != nil {
+		return nil, err
+	}
+
+	peerSet, err := h.Store.GetPeerSet(roundReceived)
 	if err != nil {
 		return nil, err
 	}
@@ -1238,7 +1269,7 @@ func (h *Hashgraph) GetFrame(roundReceived int) (*Frame, error) {
 	//Every participant needs a Root in the Frame. For the participants that
 	//have no Events in this Frame, we create a Root from their last consensus
 	//Event, or their last known Root
-	for _, p := range round.PeerSet.PubKeys() {
+	for _, p := range peerSet.PubKeys() {
 		if _, ok := roots[p]; !ok {
 			var root *Root
 			lastConsensusEventHash, isRoot, err := h.Store.LastConsensusEventFrom(p)
@@ -1287,7 +1318,7 @@ func (h *Hashgraph) GetFrame(roundReceived int) (*Frame, error) {
 
 	res := &Frame{
 		Round:  roundReceived,
-		Peers:  round.PeerSet.Peers,
+		Peers:  peerSet.Peers,
 		Roots:  roots,
 		Events: events,
 	}
