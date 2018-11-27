@@ -7,19 +7,17 @@ import (
 	"github.com/mosaicnetworks/babble/src/crypto"
 )
 
-//XXX exclude peers should be in here
-
 //PeerSet is a set of Peers forming a consensus network
 type PeerSet struct {
 	Peers    []*Peer          `json:"peers"`
 	ByPubKey map[string]*Peer `json:"by_pub_key"`
-	ByID     map[int]*Peer    `json:"by_id"`
+	ByID     map[uint32]*Peer `json:"by_id"`
 
 	//cached values
-	hash          []byte `json:"hash"`
-	hex           string `json:"hex"`
-	superMajority *int   `json:"super_majority"`
-	trustCount    *int   `json:"trust_count"`
+	hash          []byte
+	hex           string
+	superMajority *int
+	trustCount    *int
 }
 
 /* Constructors */
@@ -28,7 +26,7 @@ type PeerSet struct {
 func NewPeerSet(peers []*Peer) *PeerSet {
 	peerSet := &PeerSet{
 		ByPubKey: make(map[string]*Peer),
-		ByID:     make(map[int]*Peer),
+		ByID:     make(map[uint32]*Peer),
 	}
 
 	for _, peer := range peers {
@@ -47,6 +45,7 @@ func NewPeerSet(peers []*Peer) *PeerSet {
 
 //WithNewPeer returns a new PeerSet with a list of peers including the new one.
 func (peerSet *PeerSet) WithNewPeer(peer *Peer) *PeerSet {
+	peer.ComputeID()
 	peers := append(peerSet.Peers, peer)
 	newPeerSet := NewPeerSet(peers)
 	fmt.Println("NEW PEER", peer)
@@ -80,8 +79,8 @@ func (c *PeerSet) PubKeys() []string {
 }
 
 //IDs returns the PeerSet's slice of IDs
-func (c *PeerSet) IDs() []int {
-	res := []int{}
+func (c *PeerSet) IDs() []uint32 {
+	res := []uint32{}
 
 	for _, peer := range c.Peers {
 		res = append(res, peer.ID)

@@ -16,7 +16,7 @@ import (
 )
 
 type Core struct {
-	id     int
+	id     uint32
 	key    *ecdsa.PrivateKey
 	pubKey []byte
 	hexID  string
@@ -28,8 +28,16 @@ type Core struct {
 	peerSelector PeerSelector
 	selectorLock sync.Mutex
 
+	//Hash and Index of this instance's head Event
 	Head string
 	Seq  int
+
+	//Hashes of the Events that are not tied to the Head. This is managed by the
+	//Sync method. If the gossip condition is false (there is nothing
+	//interesting to record), items are added to heads; if the gossip condition
+	//is true, items are removed from heads and used to record a new self-event.
+	//This functionality allows to not grow the hashgraph for no reason.
+	heads []string
 
 	transactionPool         [][]byte
 	internalTransactionPool []hg.InternalTransaction
@@ -41,7 +49,7 @@ type Core struct {
 }
 
 func NewCore(
-	id int,
+	id uint32,
 	key *ecdsa.PrivateKey,
 	peers *peers.PeerSet,
 	store hg.Store,
@@ -65,6 +73,7 @@ func NewCore(
 		transactionPool:         [][]byte{},
 		internalTransactionPool: []hg.InternalTransaction{},
 		blockSignaturePool:      []hg.BlockSignature{},
+		heads:                   []string{},
 		logger:                  logEntry,
 		Head:                    "",
 		Seq:                     -1,
@@ -75,7 +84,7 @@ func NewCore(
 	return core
 }
 
-func (c *Core) ID() int {
+func (c *Core) ID() uint32 {
 	return c.id
 }
 
@@ -95,7 +104,6 @@ func (c *Core) HexID() string {
 }
 
 func (c *Core) SetHeadAndSeq() error {
-
 	var head string
 	var seq int
 
@@ -156,7 +164,7 @@ func (c *Core) InsertEvent(event *hg.Event, setWireInfo bool) error {
 	return nil
 }
 
-func (c *Core) KnownEvents() map[int]int {
+func (c *Core) KnownEvents() map[uint32]int {
 	return c.hg.Store.KnownEvents()
 }
 
@@ -241,7 +249,7 @@ func (c *Core) ProcessAcceptedInternalTransactions(roundReceived int, txs []hg.I
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-func (c *Core) OverSyncLimit(knownEvents map[int]int, syncLimit int) bool {
+func (c *Core) OverSyncLimit(knownEvents map[uint32]int, syncLimit int) bool {
 	totUnknown := 0
 	myKnownEvents := c.KnownEvents()
 	for i, li := range myKnownEvents {
@@ -260,7 +268,7 @@ func (c *Core) GetAnchorBlockWithFrame() (*hg.Block, *hg.Frame, error) {
 }
 
 //returns events that c knowns about and are not in 'known'
-func (c *Core) EventDiff(known map[int]int) (events []*hg.Event, err error) {
+func (c *Core) EventDiff(known map[uint32]int) (events []*hg.Event, err error) {
 	unknown := []*hg.Event{}
 	//known represents the index of the last event known for every participant
 	//compare this to our view of events and fill unknown with events that we know of
@@ -299,32 +307,79 @@ func (c *Core) Sync(unknownEvents []hg.WireEvent) error {
 	}).Debug("Sync")
 
 	otherHead := ""
-	//add unknown events
 	for k, we := range unknownEvents {
 		ev, err := c.hg.ReadWireInfo(we)
 		if err != nil {
-			c.logger.WithField("WireEvent", we).Errorf("ReadingWireInfo")
-
+			c.logger.WithFields(logrus.Fields{
+				"wire_event": we,
+				"error":      err,
+			}).Error("Reading WireEvent")
 			return err
 		}
+
 		if err := c.InsertEvent(ev, false); err != nil {
 			return err
 		}
 
-		//assume last event corresponds to other-head
+		//Assume last event corresponds to other-head
 		if k == len(unknownEvents)-1 {
 			otherHead = ev.Hex()
 		}
 	}
 
-	//create new event with self head and other head only if there are pending
+	c.heads = append(c.heads, otherHead)
+
+	//Create new event with self head and other head only if there are pending
 	//loaded events or the pools are not empty
 	if c.hg.PendingLoadedEvents > 0 ||
 		len(c.transactionPool) > 0 ||
 		len(c.internalTransactionPool) > 0 ||
 		len(c.blockSignaturePool) > 0 {
-		return c.AddSelfEvent(otherHead)
+
+		return c.RecordHeads()
 	}
+
+	return nil
+}
+
+func (c *Core) RecordHeads() error {
+	handledHeads := 0
+	defer func() {
+		c.heads = c.heads[handledHeads:]
+	}()
+
+	for _, b := range c.heads {
+		if err := c.AddSelfEvent(b); err != nil {
+			return err
+		}
+		handledHeads++
+	}
+
+	return nil
+}
+
+func (c *Core) AddSelfEvent(otherHead string) error {
+	//create new event with self head and otherHead
+	//empty pools in its payload
+	newHead := hg.NewEvent(c.transactionPool,
+		c.internalTransactionPool,
+		c.blockSignaturePool,
+		[]string{c.Head, otherHead},
+		c.PubKey(), c.Seq+1)
+
+	if err := c.SignAndInsertSelfEvent(newHead); err != nil {
+		return fmt.Errorf("Error inserting new head: %s", err)
+	}
+
+	c.logger.WithFields(logrus.Fields{
+		"transactions":          len(c.transactionPool),
+		"internal_transactions": len(c.internalTransactionPool),
+		"block_signatures":      len(c.blockSignaturePool),
+	}).Debug("Created Self-Event")
+
+	c.transactionPool = [][]byte{}
+	c.internalTransactionPool = []hg.InternalTransaction{}
+	c.blockSignaturePool = []hg.BlockSignature{}
 
 	return nil
 }
@@ -362,32 +417,6 @@ func (c *Core) FastForward(peer string, block *hg.Block, frame *hg.Frame) error 
 	if err != nil {
 		return err
 	}
-
-	return nil
-}
-
-func (c *Core) AddSelfEvent(otherHead string) error {
-	//create new event with self head and otherHead
-	//empty pools in its payload
-	newHead := hg.NewEvent(c.transactionPool,
-		c.internalTransactionPool,
-		c.blockSignaturePool,
-		[]string{c.Head, otherHead},
-		c.PubKey(), c.Seq+1)
-
-	if err := c.SignAndInsertSelfEvent(newHead); err != nil {
-		return fmt.Errorf("Error inserting new head: %s", err)
-	}
-
-	c.logger.WithFields(logrus.Fields{
-		"transactions":          len(c.transactionPool),
-		"internal_transactions": len(c.internalTransactionPool),
-		"block_signatures":      len(c.blockSignaturePool),
-	}).Debug("Created Self-Event")
-
-	c.transactionPool = [][]byte{}
-	c.internalTransactionPool = []hg.InternalTransaction{}
-	c.blockSignaturePool = []hg.BlockSignature{}
 
 	return nil
 }

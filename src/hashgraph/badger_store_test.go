@@ -262,7 +262,7 @@ func TestDBRoundMethods(t *testing.T) {
 	store, participants := initBadgerStore(cacheSize, t)
 	defer removeBadgerStore(store, t)
 
-	round := NewRoundInfo() //XXX something better here
+	round := NewRoundInfo()
 	events := make(map[string]*Event)
 	for _, p := range participants {
 		event := NewEvent([][]byte{},
@@ -426,7 +426,7 @@ func TestDBFrameMethods(t *testing.T) {
 		event.Sign(p.privKey)
 		events = append(events, event)
 
-		roots[p.hex] = NewBaseRoot(id)
+		roots[p.hex] = NewBaseRoot(uint32(id))
 	}
 
 	frame := &Frame{
@@ -532,7 +532,7 @@ func TestBadgerEvents(t *testing.T) {
 		}
 	}
 
-	expectedKnown := make(map[int]int)
+	expectedKnown := make(map[uint32]int)
 	for _, p := range participants {
 		expectedKnown[p.id] = testSize - 1
 	}
@@ -557,7 +557,7 @@ func TestBadgerRounds(t *testing.T) {
 	store, participants := initBadgerStore(cacheSize, t)
 	defer removeBadgerStore(store, t)
 
-	round := NewRoundInfo() //XXX
+	round := NewRoundInfo()
 	events := make(map[string]*Event)
 	for _, p := range participants {
 		event := NewEvent([][]byte{},
@@ -694,7 +694,7 @@ func TestBadgerFrames(t *testing.T) {
 		event.Sign(p.privKey)
 		events = append(events, event)
 
-		roots[p.hex] = NewBaseRoot(id)
+		roots[p.hex] = NewBaseRoot(uint32(id))
 	}
 
 	frame := &Frame{

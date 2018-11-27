@@ -11,7 +11,7 @@ import (
 )
 
 type participant struct {
-	id      int
+	id      uint32
 	privKey *ecdsa.PrivateKey
 	pubKey  []byte
 	hex     string
@@ -100,7 +100,7 @@ func TestInmemEvents(t *testing.T) {
 	})
 
 	t.Run("Check KnownEvents", func(t *testing.T) {
-		expectedKnown := make(map[int]int)
+		expectedKnown := make(map[uint32]int)
 		for _, p := range participants {
 			expectedKnown[p.id] = testSize - 1
 		}
@@ -126,7 +126,7 @@ func TestInmemEvents(t *testing.T) {
 func TestInmemRounds(t *testing.T) {
 	store, participants := initInmemStore(10)
 
-	round := NewRoundInfo() //XXX
+	round := NewRoundInfo()
 	events := make(map[string]*Event)
 	for _, p := range participants {
 		event := NewEvent([][]byte{},

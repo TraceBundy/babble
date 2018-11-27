@@ -20,7 +20,7 @@ type Node struct {
 	conf   *Config
 	logger *logrus.Entry
 
-	id       int
+	id       uint32
 	core     *Core
 	coreLock sync.Mutex
 
@@ -43,7 +43,7 @@ type Node struct {
 }
 
 func NewNode(conf *Config,
-	id int,
+	id uint32,
 	key *ecdsa.PrivateKey,
 	peers *peers.PeerSet,
 	store hg.Store,
@@ -262,29 +262,22 @@ func (n *Node) processSyncRequest(rpc net.RPC, cmd *net.SyncRequest) {
 	} else {
 		//Compute Diff
 		start := time.Now()
-
 		n.coreLock.Lock()
-
 		eventDiff, err := n.core.EventDiff(cmd.Known)
-
 		n.coreLock.Unlock()
-
 		elapsed := time.Since(start)
 
 		n.logger.WithField("duration", elapsed.Nanoseconds()).Debug("Diff()")
 
 		if err != nil {
 			n.logger.WithField("error", err).Error("Calculating Diff")
-
 			respErr = err
 		}
 
 		//Convert to WireEvents
 		wireEvents, err := n.core.ToWire(eventDiff)
-
 		if err != nil {
 			n.logger.WithField("error", err).Debug("Converting to WireEvent")
-
 			respErr = err
 		} else {
 			resp.Events = wireEvents
@@ -293,9 +286,7 @@ func (n *Node) processSyncRequest(rpc net.RPC, cmd *net.SyncRequest) {
 
 	//Get Self Known
 	n.coreLock.Lock()
-
 	knownEvents := n.core.KnownEvents()
-
 	n.coreLock.Unlock()
 
 	resp.Known = knownEvents
@@ -376,14 +367,11 @@ func (n *Node) processEagerSyncRequest(rpc net.RPC, cmd *net.EagerSyncRequest) {
 	success := true
 
 	n.coreLock.Lock()
-
 	err := n.sync(cmd.Events)
-
 	n.coreLock.Unlock()
 
 	if err != nil {
 		n.logger.WithField("error", err).Error("sync()")
-
 		success = false
 	}
 
@@ -483,7 +471,7 @@ func (n *Node) gossip(peer *peers.Peer, parentReturnCh chan struct{}) error {
 	return nil
 }
 
-func (n *Node) pull(peer *peers.Peer) (syncLimit bool, otherKnownEvents map[int]int, err error) {
+func (n *Node) pull(peer *peers.Peer) (syncLimit bool, otherKnownEvents map[uint32]int, err error) {
 	//Compute Known
 	n.coreLock.Lock()
 
@@ -529,7 +517,7 @@ func (n *Node) pull(peer *peers.Peer) (syncLimit bool, otherKnownEvents map[int]
 	return false, resp.Known, nil
 }
 
-func (n *Node) push(peer *peers.Peer, knownEvents map[int]int) error {
+func (n *Node) push(peer *peers.Peer, knownEvents map[uint32]int) error {
 
 	//Check SyncLimit
 	n.coreLock.Lock()
@@ -655,7 +643,7 @@ func (n *Node) fastForward() error {
 	return nil
 }
 
-func (n *Node) requestSync(target string, known map[int]int) (net.SyncResponse, error) {
+func (n *Node) requestSync(target string, known map[uint32]int) (net.SyncResponse, error) {
 	args := net.SyncRequest{
 		FromID: n.id,
 		Known:  known,
@@ -750,7 +738,6 @@ func (n *Node) addTransaction(tx []byte) {
 
 func (n *Node) addInternalTransaction(tx hg.InternalTransaction) {
 	n.coreLock.Lock()
-
 	defer n.coreLock.Unlock()
 
 	n.core.AddInternalTransactions([]hg.InternalTransaction{tx})
@@ -815,7 +802,7 @@ func (n *Node) GetStats() map[string]string {
 		"events_per_second":      strconv.FormatFloat(consensusEventsPerSecond, 'f', 2, 64),
 		"rounds_per_second":      strconv.FormatFloat(consensusRoundsPerSecond, 'f', 2, 64),
 		"round_events":           strconv.Itoa(n.core.GetLastCommitedRoundEventsCount()),
-		"id":                     strconv.Itoa(n.id),
+		"id":                     fmt.Sprint(n.id),
 		"state":                  n.getState().String(),
 	}
 	return s
@@ -855,12 +842,12 @@ func (n *Node) GetBlock(blockIndex int) (*hg.Block, error) {
 	return n.core.hg.Store.GetBlock(blockIndex)
 }
 
-func (n *Node) GetEvents() (map[int]int, error) {
+func (n *Node) GetEvents() (map[uint32]int, error) {
 	res := n.core.KnownEvents()
 
 	return res, nil
 }
 
-func (n *Node) ID() int {
+func (n *Node) ID() uint32 {
 	return n.id
 }

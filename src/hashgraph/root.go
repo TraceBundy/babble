@@ -64,15 +64,16 @@ ex 2:
 //to allow inserting Events on top of it.
 type RootEvent struct {
 	Hash             string
-	CreatorID        int
+	CreatorID        uint32
 	Index            int
 	LamportTimestamp int
 	Round            int
+	NextRound        int
 }
 
 //NewBaseRootEvent creates a RootEvent corresponding to the the very beginning
 //of a Hashgraph.
-func NewBaseRootEvent(creatorID int) RootEvent {
+func NewBaseRootEvent(creatorID uint32) RootEvent {
 	res := RootEvent{
 		Hash:             fmt.Sprintf("Root%d", creatorID),
 		CreatorID:        creatorID,
@@ -90,15 +91,13 @@ func NewBaseRootEvent(creatorID int) RootEvent {
 //Round; it is only used if the child's OtherParent is empty or NOT in the
 //Root's Others.
 type Root struct {
-	NextRound  int
 	SelfParent RootEvent
 	Others     map[string]RootEvent
 }
 
 //NewBaseRoot initializes a Root object for a fresh Hashgraph.
-func NewBaseRoot(creatorID int) *Root {
+func NewBaseRoot(creatorID uint32) *Root {
 	res := &Root{
-		NextRound:  0,
 		SelfParent: NewBaseRootEvent(creatorID),
 		Others:     map[string]RootEvent{},
 	}

@@ -147,7 +147,6 @@ func (b *Babble) initNode() error {
 	}
 
 	n, ok := b.Peers.ByPubKey[nodePub]
-
 	if !ok {
 		return fmt.Errorf("Cannot find self pubkey in peers.json")
 	}
