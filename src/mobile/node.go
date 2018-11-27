@@ -77,9 +77,9 @@ func New(privKey string,
 
 func (n *Node) Run(async bool) {
 	if async {
-		n.node.RunAsync(true)
+		n.node.RunAsync("", true) // placeholder for connect addr
 	} else {
-		n.node.Run(true)
+		n.node.Run("", true)
 	}
 }
 

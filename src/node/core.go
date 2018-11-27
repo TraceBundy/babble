@@ -163,6 +163,7 @@ func (c *Core) KnownEvents() map[int]int {
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 func (c *Core) Commit(block *hg.Block) error {
+	c.logger.Error("CORE COMMIT")
 	//Commit the Block to the App
 	commitResponse, err := c.proxyCommitCallback(*block)
 

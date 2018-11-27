@@ -68,7 +68,7 @@ func NewNode(conf *Config,
 	node.needBoostrap = store.NeedBoostrap()
 
 	//Initialize as Babbling
-	node.setState(CatchingUp)
+	node.setState(Babbling)
 
 	return &node
 }
@@ -86,25 +86,44 @@ func (n *Node) Init() error {
 }
 
 func (n *Node) connect(addr string) error {
+	var res net.JoinResponse
+
 	if len(addr) > 0 {
-		if _, err := n.requestJoin(addr); err != nil {
+		response, err := n.requestJoin(addr)
+
+		if err != nil {
 			n.logger.Error("Cannot join:", addr, err)
 
 			n.setState(Shutdown)
 
 			return err
 		}
+
+		res = response
 	}
 
-	n.setState(Babbling)
+	n.core.peers = n.core.peers.WithNewPeer(&res.Peer)
+	n.core.peerSelector = NewRandomPeerSelector(n.core.peers, n.id)
+
+	n.setState(CatchingUp)
 
 	return nil
+}
+
+func (n *Node) RunAsync(addr string, gossip bool) {
+	n.logger.Debug("runasync")
+
+	go n.Run(addr, gossip)
 }
 
 func (n *Node) Run(addr string, gossip bool) {
 	//The ControlTimer allows the background routines to control the
 	//heartbeat timer when the node is in the Babbling state. The timer should
 	//only be running when there are uncommitted transactions in the system.
+	if len(addr) > 0 {
+		n.setState(Joining)
+	}
+
 	go n.controlTimer.Run(n.conf.HeartbeatTimeout)
 
 	//Execute some background work regardless of the state of the node.
@@ -299,7 +318,7 @@ func (n *Node) processJoinRequest(rpc net.RPC, cmd *net.JoinRequest) {
 
 	resp := &net.JoinResponse{
 		FromID: n.id,
-		Answer: true,
+		Peer:   *n.core.peers.ByID[n.id],
 	}
 
 	var respErr error
@@ -319,15 +338,31 @@ func (n *Node) processJoinRequest(rpc net.RPC, cmd *net.JoinRequest) {
 			}
 
 		}
-		if err := n.core.RunConsensus(); err != nil {
-			respErr = err
-
-			// break
-		}
 
 	}
 
+	if err := n.core.RunConsensus(); err != nil {
+		respErr = err
+
+		// break
+	}
+
+	if n.core.hg.AnchorBlock == nil {
+		anchor := n.core.hg.Store.LastBlockIndex()
+		n.core.hg.AnchorBlock = &anchor
+	}
+
+	n.logger.Error("ANCHOR ", n.core.hg.Store.LastBlockIndex(), n.core.hg.Store.LastRound())
+
+	// if respErr != nil {
+	// 	rpc.Respond(&net.FastForwardResponse{}, respErr)
+
+	// 	return
+	// }
+
 	// n.coreLock.Unlock()
+
+	// n.processFastForwardRequest(rpc, &net.FastForwardRequest{cmd.FromID})
 
 	rpc.Respond(resp, respErr)
 }
@@ -563,11 +598,9 @@ func (n *Node) fastForward() error {
 	//fastForwardRequest
 	peer := n.core.peerSelector.Next()
 
-	if peer == nil {
-		n.setState(Joining)
-
-		return nil
-	}
+	// if peer == nil && len(addr) > 0 {
+	// 	peer = peers.NewPeer("", addr)
+	// }
 
 	start := time.Now()
 
@@ -601,6 +634,7 @@ func (n *Node) fastForward() error {
 
 	if err != nil {
 		n.logger.WithField("error", err).Error("Fast Forwarding Hashgraph")
+		n.logger.Panic("LOL ", resp.Frame.Round, resp.Block.Index(), len(resp.Frame.Peers))
 
 		return err
 	}
@@ -616,7 +650,7 @@ func (n *Node) fastForward() error {
 
 	n.logger.Debug("Fast-Forward OK")
 
-	n.setState(Joining)
+	n.setState(Babbling)
 
 	return nil
 }

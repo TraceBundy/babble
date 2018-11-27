@@ -34,6 +34,7 @@ type Transport interface {
 	// Sync sends the appropriate RPC to the target node.
 	Sync(target string, args *SyncRequest, resp *SyncResponse) error
 
+	// Special request to join a network
 	Join(target string, args *JoinRequest, resp *JoinResponse) error
 
 	EagerSync(target string, args *EagerSyncRequest, resp *EagerSyncResponse) error

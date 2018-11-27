@@ -26,7 +26,7 @@ type JoinRequest struct {
 
 type JoinResponse struct {
 	FromID int
-	Answer bool
+	Peer   peers.Peer
 }
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

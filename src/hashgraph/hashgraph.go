@@ -270,14 +270,6 @@ func (h *Hashgraph) _round(x string) (int, error) {
 		}
 	}
 
-	if err != nil {
-		if common.Is(err, common.KeyNotFound) {
-			return parentRound, nil
-		} else {
-			return math.MinInt32, err
-		}
-	}
-
 	c := 0
 	for _, w := range parentRoundObj.Witnesses() {
 		ss, err := h.stronglySee(x, w, parentRoundPeerSet)
@@ -1159,21 +1151,16 @@ func (h *Hashgraph) ProcessDecidedRounds() error {
 				return err
 			}
 
-			if len(block.Transactions()) > 0 {
-				if err := h.Store.SetBlock(block); err != nil {
-					return err
-				}
-
-				err := h.commitCallback(block)
-				if err != nil {
-					h.logger.Warningf("Failed to commit block %d", block.Index())
-				}
-
+			// if len(block.Transactions()) > 0 || len(block.InternalTransactions()) > 0 {
+			if err := h.Store.SetBlock(block); err != nil {
+				return err
 			}
 
-			for _, tx := range block.InternalTransactions() {
-				h.ProcessInternalTransactions(&tx, r.Index)
+			err = h.commitCallback(block)
+			if err != nil {
+				h.logger.Warningf("Failed to commit block %d", block.Index())
 			}
+			// }
 		} else {
 			h.logger.Debugf("No Events to commit for ConsensusRound %d", r.Index)
 		}
@@ -1184,38 +1171,6 @@ func (h *Hashgraph) ProcessDecidedRounds() error {
 			h.setLastConsensusRound(r.Index)
 		}
 
-	}
-
-	return nil
-}
-
-func (h *Hashgraph) ProcessInternalTransactions(tx *InternalTransaction, roundReceived int) error {
-	tx.Peer.ComputeID()
-
-	for i := roundReceived + 4; i < h.Store.LastRound(); i++ {
-		peerSet, err := h.Store.GetPeerSet(i)
-
-		if err != nil {
-			h.logger.Error("ProcessInternalTransaction: ", err)
-
-			continue
-		}
-
-		var newPeers *peers.PeerSet
-
-		if tx.Type == PEER_ADD {
-			newPeers = peerSet.WithNewPeer(&tx.Peer)
-		}
-
-		if tx.Type == PEER_REMOVE {
-			newPeers = peerSet.WithRemovedPeer(&tx.Peer)
-		}
-
-		if err := h.Store.SetPeerSet(i, newPeers); err != nil {
-			h.logger.Error("ProcessInternalTransaction: ", err)
-
-			continue
-		}
 	}
 
 	return nil
@@ -1520,7 +1475,12 @@ func (h *Hashgraph) ReadWireInfo(wevent WireEvent) (*Event, error) {
 	otherParent := ""
 	var err error
 
-	creator := h.Store.RepertoireByID()[wevent.Body.CreatorID]
+	creator, ok := h.Store.RepertoireByID()[wevent.Body.CreatorID]
+
+	if !ok {
+		return nil, fmt.Errorf("ReadWireInfo: Cannot find creator %d", wevent.Body.CreatorID)
+	}
+
 	creatorBytes, err := hex.DecodeString(creator.PubKeyHex[2:])
 	if err != nil {
 		return nil, err
@@ -1610,7 +1570,7 @@ func (h *Hashgraph) CheckBlock(block *Block, peerSet *peers.PeerSet) error {
 		}
 	}
 
-	if validSignatures <= peerSet.TrustCount() {
+	if validSignatures < peerSet.TrustCount() {
 		return fmt.Errorf("Not enough valid signatures: got %d, need %d", validSignatures, peerSet.TrustCount())
 	}
 

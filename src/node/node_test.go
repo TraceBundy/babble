@@ -63,7 +63,7 @@ func TestProcessSync(t *testing.T) {
 		dummy.NewInmemDummyClient(testLogger))
 	node0.Init()
 
-	node0.RunAsync(false)
+	node0.RunAsync("", false)
 
 	peer1Trans, err := net.NewTCPTransport(peers[1].NetAddr, nil, 2, time.Second, testLogger)
 	if err != nil {
@@ -77,7 +77,7 @@ func TestProcessSync(t *testing.T) {
 		dummy.NewInmemDummyClient(testLogger))
 	node1.Init()
 
-	node1.RunAsync(false)
+	node1.RunAsync("", false)
 
 	//Manually prepare SyncRequest and expected SyncResponse
 
@@ -159,7 +159,7 @@ func TestProcessEagerSync(t *testing.T) {
 		dummy.NewInmemDummyClient(testLogger))
 	node0.Init()
 
-	node0.RunAsync(false)
+	node0.RunAsync("", false)
 
 	peer1Trans, err := net.NewTCPTransport(peers[1].NetAddr, nil, 2, time.Second, testLogger)
 	if err != nil {
@@ -173,7 +173,7 @@ func TestProcessEagerSync(t *testing.T) {
 		dummy.NewInmemDummyClient(testLogger))
 	node1.Init()
 
-	node1.RunAsync(false)
+	node1.RunAsync("", false)
 
 	//Manually prepare EagerSyncRequest and expected EagerSyncResponse
 
@@ -236,7 +236,7 @@ func TestAddTransaction(t *testing.T) {
 		peer0Proxy)
 	node0.Init()
 
-	node0.RunAsync(false)
+	node0.RunAsync("", false)
 
 	peer1Trans, err := net.NewTCPTransport(peers[1].NetAddr, nil, 2, time.Second, common.NewTestLogger(t))
 	if err != nil {
@@ -251,7 +251,7 @@ func TestAddTransaction(t *testing.T) {
 		peer1Proxy)
 	node1.Init()
 
-	node1.RunAsync(false)
+	node1.RunAsync("", false)
 	//Submit a Tx to node0
 
 	message := "Hello World!"
@@ -409,7 +409,7 @@ func runNodes(nodes []*Node, gossip bool) {
 	for _, n := range nodes {
 		node := n
 		go func() {
-			node.Run(gossip)
+			node.Run("", gossip)
 		}()
 	}
 }
@@ -602,7 +602,7 @@ func TestCatchUp(t *testing.T) {
 		}
 	}()
 
-	node4.RunAsync(true)
+	node4.RunAsync("", true)
 	defer node4.Shutdown()
 
 	//Gossip some more
@@ -664,7 +664,7 @@ func TestFastSync(t *testing.T) {
 		}
 	}()
 
-	node4.RunAsync(true)
+	node4.RunAsync("", true)
 	defer node4.Shutdown()
 
 	nodes[3] = node4
@@ -870,7 +870,7 @@ func TestPeerJoinRequest(t *testing.T) {
 
 	node := new_node(key, peerSet, 1000, 1000, "inmem", logger, t)
 	go func() {
-		node.Run(true)
+		node.Run("", true)
 	}()
 
 	nodes = append(nodes, node)
