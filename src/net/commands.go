@@ -20,13 +20,13 @@ type SyncResponse struct {
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 type JoinRequest struct {
-	FromID int
-	Peer   peers.Peer
+	FromID uint32
+	Peer   peers.Peer // peer that want to join
 }
 
 type JoinResponse struct {
-	FromID int
-	Peer   peers.Peer
+	FromID uint32
+	Peer   peers.Peer // peer to fastforward from
 }
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

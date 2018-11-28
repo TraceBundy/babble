@@ -1165,17 +1165,16 @@ func (h *Hashgraph) ProcessDecidedRounds() error {
 				return err
 			}
 
-			if len(block.Transactions()) > 0 ||
-				len(block.InternalTransactions()) > 0 {
+			// if len(block.Transactions()) > 0 ||
+			// 	len(block.InternalTransactions()) > 0 {
 
-				if err := h.Store.SetBlock(block); err != nil {
-					return err
-				}
+			if err := h.Store.SetBlock(block); err != nil {
+				return err
+			}
 
-				err := h.commitCallback(block)
-				if err != nil {
-					h.logger.Warningf("Failed to commit block %d", block.Index())
-				}
+			err = h.commitCallback(block)
+			if err != nil {
+				h.logger.Warningf("Failed to commit block %d", block.Index())
 			}
 			// }
 		} else {
@@ -1498,6 +1497,8 @@ func (h *Hashgraph) ReadWireInfo(wevent WireEvent) (*Event, error) {
 	selfParent := rootSelfParent(wevent.Body.CreatorID)
 	otherParent := ""
 	var err error
+
+	h.logger.Error("REPERTOIRE ?!", h.Store.RepertoireByID())
 
 	creator, ok := h.Store.RepertoireByID()[wevent.Body.CreatorID]
 

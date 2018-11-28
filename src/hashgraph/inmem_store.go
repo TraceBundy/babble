@@ -1,6 +1,7 @@
 package hashgraph
 
 import (
+	"fmt"
 	"strconv"
 
 	cm "github.com/mosaicnetworks/babble/src/common"
@@ -110,6 +111,7 @@ func (s *InmemStore) SetPeerSet(round int, peerSet *peers.PeerSet) error {
 
 		s.repertoireByPubKey[p.PubKeyHex] = p
 		s.repertoireByID[p.ID] = p
+		fmt.Println("ADD TO REPERTOIR REPERTOIRE", p.ID)
 	}
 
 	return nil
